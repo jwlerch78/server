@@ -24,7 +24,13 @@ from music_assistant_models.media_items import (
     Track,
 )
 
-from music_assistant.constants import DB_TABLE_PLAYLOG, DB_TABLE_PROVIDER_MAPPINGS, MASS_LOGGER_NAME
+from music_assistant.constants import (
+    DB_TABLE_ALIAS_MEDIA_ITEM_MAPPING,
+    DB_TABLE_GENRE_ALIAS_MAPPING,
+    DB_TABLE_PLAYLOG,
+    DB_TABLE_PROVIDER_MAPPINGS,
+    MASS_LOGGER_NAME,
+)
 from music_assistant.controllers.webserver.helpers.auth_middleware import get_current_user
 from music_assistant.helpers.compare import compare_media_item, create_safe_string
 from music_assistant.helpers.database import UNSET
@@ -250,6 +256,7 @@ class MediaControllerBase[ItemCls: "MediaItemType"](metaclass=ABCMeta):
         offset: int = 0,
         order_by: str = "sort_name",
         provider: str | list[str] | None = None,
+        genre_ids: int | list[int] | None = None,
     ) -> list[ItemCls]:
         """
         Get the library items for this mediatype.
@@ -260,6 +267,7 @@ class MediaControllerBase[ItemCls: "MediaItemType"](metaclass=ABCMeta):
         :param offset: Number of items to skip.
         :param order_by: Order by field (e.g. 'sort_name', 'timestamp_added').
         :param provider: Filter by provider instance ID (single string or list).
+        :param genre_ids: Filter by genre id(s).
         """
         return await self.get_library_items_by_query(
             favorite=favorite,
@@ -268,6 +276,7 @@ class MediaControllerBase[ItemCls: "MediaItemType"](metaclass=ABCMeta):
             offset=offset,
             order_by=order_by,
             provider_filter=self._ensure_provider_filter(provider),
+            genre_ids=genre_ids,
         )
 
     async def iter_library_items(
@@ -276,6 +285,7 @@ class MediaControllerBase[ItemCls: "MediaItemType"](metaclass=ABCMeta):
         search: str | None = None,
         order_by: str = "sort_name",
         provider: str | list[str] | None = None,
+        genre_ids: int | list[int] | None = None,
     ) -> AsyncGenerator[ItemCls, None]:
         """Iterate all in-database items."""
         limit: int = 500
@@ -288,6 +298,7 @@ class MediaControllerBase[ItemCls: "MediaItemType"](metaclass=ABCMeta):
             next_items = await self.get_library_items_by_query(
                 favorite=favorite,
                 search=search,
+                genre_ids=genre_ids,
                 limit=limit,
                 offset=offset,
                 order_by=order_by,
@@ -857,12 +868,14 @@ class MediaControllerBase[ItemCls: "MediaItemType"](metaclass=ABCMeta):
         extra_query_parts: list[str] | None = None,
         extra_query_params: dict[str, Any] | None = None,
         extra_join_parts: list[str] | None = None,
+        genre_ids: int | list[int] | None = None,
     ) -> list[ItemCls]:
         """Fetch MediaItem records from database by building the query."""
         query_params = dict(extra_query_params) if extra_query_params else {}
         query_parts: list[str] = list(extra_query_parts) if extra_query_parts else []
         join_parts: list[str] = list(extra_join_parts) if extra_join_parts else []
         search = self._preprocess_search(search, query_params)
+        genre_ids = self._preprocess_genre_ids(genre_ids)
         # create special performant random query
         if order_by and order_by.startswith("random"):
             self._apply_random_subquery(
@@ -871,6 +884,7 @@ class MediaControllerBase[ItemCls: "MediaItemType"](metaclass=ABCMeta):
                 join_parts=join_parts,
                 favorite=favorite,
                 search=search,
+                genre_ids=genre_ids,
                 provider_filter=provider_filter,
                 limit=limit,
             )
@@ -882,6 +896,7 @@ class MediaControllerBase[ItemCls: "MediaItemType"](metaclass=ABCMeta):
                 join_parts=join_parts,
                 favorite=favorite,
                 search=search,
+                genre_ids=genre_ids,
                 provider_filter=provider_filter,
             )
         # build and execute final query
@@ -904,6 +919,17 @@ class MediaControllerBase[ItemCls: "MediaItemType"](metaclass=ABCMeta):
 
     @final
     @staticmethod
+    def _preprocess_genre_ids(genre_ids: int | list[int] | None) -> list[int] | None:
+        if genre_ids is None:
+            return None
+        if isinstance(genre_ids, list):
+            normalized = [int(x) for x in genre_ids]
+        else:
+            normalized = [int(genre_ids)]
+        return normalized or None
+
+    @final
+    @staticmethod
     def _clean_query_parts(query_parts: list[str]) -> list[str]:
         """Clean the query parts list by removing duplicate where statements."""
         return [x[5:] if x.lower().startswith("where ") else x for x in query_parts]
@@ -916,6 +942,7 @@ class MediaControllerBase[ItemCls: "MediaItemType"](metaclass=ABCMeta):
         join_parts: list[str],
         favorite: bool | None,
         search: str | None,
+        genre_ids: list[int] | None,
         provider_filter: list[str] | None,
         limit: int,
     ) -> None:
@@ -930,6 +957,7 @@ class MediaControllerBase[ItemCls: "MediaItemType"](metaclass=ABCMeta):
             join_parts=sub_join_parts,
             favorite=favorite,
             search=search,
+            genre_ids=genre_ids,
             provider_filter=provider_filter,
         )
 
@@ -958,6 +986,7 @@ class MediaControllerBase[ItemCls: "MediaItemType"](metaclass=ABCMeta):
         join_parts: list[str],
         favorite: bool | None,
         search: str | None,
+        genre_ids: list[int] | None,
         provider_filter: list[str] | None,
     ) -> None:
         """Apply search, favorite, and provider filters."""
@@ -968,6 +997,17 @@ class MediaControllerBase[ItemCls: "MediaItemType"](metaclass=ABCMeta):
         if favorite is not None:
             query_parts.append(f"{self.db_table}.favorite = :favorite")
             query_params["favorite"] = favorite
+        # handle genre filter
+        if genre_ids:
+            query_params["genre_ids"] = genre_ids
+            query_params["genre_media_type"] = self.media_type.value
+            query_parts.append(
+                f"{self.db_table}.item_id IN ("
+                f"SELECT media_id FROM {DB_TABLE_ALIAS_MEDIA_ITEM_MAPPING} "
+                "WHERE media_type = :genre_media_type AND alias_id IN ("
+                f"SELECT alias_id FROM {DB_TABLE_GENRE_ALIAS_MAPPING} "
+                "WHERE genre_id IN :genre_ids))"
+            )
         # Apply the provider filter
         if provider_filter:
             provider_conditions = []

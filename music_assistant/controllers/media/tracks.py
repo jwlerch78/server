@@ -168,6 +168,7 @@ class TracksController(MediaControllerBase[Track]):
         offset: int = 0,
         order_by: str = "sort_name",
         provider: str | list[str] | None = None,
+        genre_ids: int | list[int] | None = None,
     ) -> list[Track]:
         """Get in-database tracks.
 
@@ -177,6 +178,7 @@ class TracksController(MediaControllerBase[Track]):
         :param offset: Number of items to skip.
         :param order_by: Order by field (e.g. 'sort_name', 'timestamp_added').
         :param provider: Filter by provider instance ID (single string or list).
+        :param genre_ids: Filter by genre id(s).
         """
         extra_query_params: dict[str, Any] = {}
         extra_query_parts: list[str] = []
@@ -199,6 +201,7 @@ class TracksController(MediaControllerBase[Track]):
         result = await self.get_library_items_by_query(
             favorite=favorite,
             search=search,
+            genre_ids=genre_ids,
             limit=limit,
             offset=offset,
             order_by=order_by,
@@ -220,6 +223,7 @@ class TracksController(MediaControllerBase[Track]):
             for _track in await self.get_library_items_by_query(
                 favorite=favorite,
                 search=None,
+                genre_ids=genre_ids,
                 limit=limit,
                 order_by=order_by,
                 provider_filter=self._ensure_provider_filter(provider),
