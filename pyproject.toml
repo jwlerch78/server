@@ -30,7 +30,7 @@ dependencies = [
   "getmac==0.9.5",
   "mashumaro==3.18",
   "music-assistant-frontend==2.17.86",
-  "music-assistant-models @ file:///Users/jozefkruszynski/Projects/official/music-assistant/models",
+  "music-assistant-models @ git+https://github.com/music-assistant/models.git@feat/genres-v2-implementation",
   "mutagen==1.47.0",
   "orjson==3.11.5",
   "pillow==12.1.1",
