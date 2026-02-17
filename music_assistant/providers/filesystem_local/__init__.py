@@ -353,30 +353,37 @@ class LocalFileSystemProvider(MusicProvider):
         # in a single executor thread to save the overhead of having to spin up tons of tasks
         def listdir(path: str) -> Iterator[FileSystemItem]:
             """Recursively traverse directory entries."""
-            for item in os.scandir(path):
-                # ignore invalid filenames
-                if item.name in IGNORE_DIRS or item.name.startswith((".", "_")):
-                    continue
-                if item.is_dir(follow_symlinks=False):
-                    yield from listdir(item.path)
-                elif item.is_file(follow_symlinks=False):
-                    # skip files without extension
-                    if "." not in item.name:
+            try:
+                entries = os.scandir(path)
+            except OSError as err:
+                self.logger.warning(
+                    "Unable to scan directory %s: %s",
+                    path,
+                    str(err),
+                )
+                return
+            for item in entries:
+                try:
+                    # ignore invalid filenames
+                    if item.name in IGNORE_DIRS or item.name.startswith((".", "_")):
                         continue
-                    ext = item.name.rsplit(".", 1)[1].lower()
-                    if ext not in SUPPORTED_EXTENSIONS:
-                        # skip unsupported file extension
-                        continue
-                    try:
+                    if item.is_dir(follow_symlinks=False):
+                        yield from listdir(item.path)
+                    elif item.is_file(follow_symlinks=False):
+                        # skip files without extension
+                        if "." not in item.name:
+                            continue
+                        ext = item.name.rsplit(".", 1)[1].lower()
+                        if ext not in SUPPORTED_EXTENSIONS:
+                            # skip unsupported file extension
+                            continue
                         yield FileSystemItem.from_dir_entry(item, self.base_path)
-                    except OSError as err:
-                        # Skip files that cannot be stat'd (e.g., invalid encoding on SMB mounts)
-                        # This typically happens with emoji or special unicode characters
-                        self.logger.debug(
-                            "Skipping file %s due to stat error: %s",
-                            item.path,
-                            str(err),
-                        )
+                except OSError as err:
+                    self.logger.warning(
+                        "Skipping %s due to filesystem error: %s",
+                        item.path,
+                        str(err),
+                    )
 
         def run_sync() -> None:
             """Run the actual sync (in an executor job)."""

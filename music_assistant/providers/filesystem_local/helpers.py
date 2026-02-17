@@ -186,10 +186,10 @@ def get_album_dir(track_dir: str, album_name: str) -> str | None:
             if _dir_contains_album_name(album_name, dirname):
                 return parentdir
 
-        if compare_strings(album_name.split("(")[0], dirname, False):
+        if compare_strings(album_name.split("(", maxsplit=1)[0], dirname, False):
             # account for AlbumName (Version) format in the album name
             return parentdir
-        if compare_strings(album_name.split("(")[0], dirname.split(" - ")[-1], False):
+        if compare_strings(album_name.split("(", maxsplit=1)[0], dirname.split(" - ")[-1], False):
             # account for ArtistName - AlbumName (Version) format
             return parentdir
         if len(album_name) > 8 and album_name in dirname:
@@ -231,17 +231,18 @@ def sorted_scandir(base_path: str, sub_path: str, sort: bool = False) -> list[Fi
     if base_path not in sub_path:
         sub_path = os.path.join(base_path, sub_path)
     items = []
-    for entry in os.scandir(sub_path):
-        # filter out invalid dirs and hidden files
-        if not (entry.is_dir(follow_symlinks=False) or entry.is_file(follow_symlinks=False)):
-            continue
-        if entry.name in IGNORE_DIRS or entry.name.startswith("."):
-            continue
+    try:
+        entries = os.scandir(sub_path)
+    except OSError:
+        return items
+    for entry in entries:
         try:
+            if not (entry.is_dir(follow_symlinks=False) or entry.is_file(follow_symlinks=False)):
+                continue
+            if entry.name in IGNORE_DIRS or entry.name.startswith("."):
+                continue
             items.append(FileSystemItem.from_dir_entry(entry, base_path))
         except OSError:
-            # Skip files that cannot be stat'd (e.g., invalid encoding on SMB mounts)
-            # This typically happens with emoji or special unicode characters
             continue
 
     if sort:

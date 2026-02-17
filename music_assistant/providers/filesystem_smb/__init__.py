@@ -322,10 +322,13 @@ class SMBFileSystemProvider(LocalFileSystemProvider):
         options.append(f"cache={cache_mode}")
 
         # Case insensitive by default (standard for SMB) and other performance options
-        # Note: iocharset is omitted to allow CIFS native Unicode handling for emoji
-        # and other 4-byte UTF-8 characters.
+        # iocharset=utf8 is required so the CIFS module uses its internal UTF-8
+        # conversion (which properly handles surrogate pairs for emoji and other
+        # characters above U+FFFF) instead of the kernel's CONFIG_NLS_DEFAULT
+        # charset, which is typically iso8859-1 and cannot represent emoji.
         options.extend(
             [
+                "iocharset=utf8",
                 "nocase",
                 "file_mode=0755",
                 "dir_mode=0755",
