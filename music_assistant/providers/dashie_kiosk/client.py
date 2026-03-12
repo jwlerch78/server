@@ -103,6 +103,7 @@ class DashieKioskClient:
         album: str = "",
         image_url: str = "",
         duration: int = 0,
+        entity_id: str = "",
     ) -> None:
         """Push track metadata to the device for on-screen display."""
         await self._send_command(
@@ -112,4 +113,5 @@ class DashieKioskClient:
             album=album,
             imageUrl=image_url,
             duration=duration,
+            entityId=entity_id,
         )

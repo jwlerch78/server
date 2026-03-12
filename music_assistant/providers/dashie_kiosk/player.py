@@ -148,6 +148,7 @@ class DashieKioskPlayer(Player):
                 album=media.album or "",
                 image_url=media.image_url or "",
                 duration=(media.duration or 0) * 1000,  # seconds → milliseconds
+                entity_id=self.player_id,
             )
             self._last_pushed_media_title = title
         except Exception as err:
