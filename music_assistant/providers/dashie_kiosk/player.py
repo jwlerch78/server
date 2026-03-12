@@ -82,6 +82,8 @@ class DashieKioskPlayer(Player):
         current_url = info.get("soundUrlPlaying", "")
         if not current_url:
             self._attr_playback_state = PlaybackState.IDLE
+        elif info.get("soundPaused"):
+            self._attr_playback_state = PlaybackState.PAUSED
         self._attr_available = True
 
     async def volume_set(self, volume_level: int) -> None:
