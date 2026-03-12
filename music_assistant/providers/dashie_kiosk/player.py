@@ -171,6 +171,7 @@ class DashieKioskPlayer(Player):
                 if (
                     media is not None
                     and media.title
+                    and media.artist  # skip placeholders with no artist
                     and media.title != self._last_pushed_media_title
                 ):
                     logger.info("Pushing updated media info: %s", media.title)
