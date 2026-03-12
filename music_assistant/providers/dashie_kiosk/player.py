@@ -57,7 +57,7 @@ class DashieKioskPlayer(Player):
         self._attr_device_info.add_identifier(IdentifierType.IP_ADDRESS, address)
         self._attr_available = True
         self._attr_needs_poll = True
-        self._attr_poll_interval = 10
+        self._attr_poll_interval = 3
 
     @property
     def requires_flow_mode(self) -> bool:
@@ -84,6 +84,8 @@ class DashieKioskPlayer(Player):
             self._attr_playback_state = PlaybackState.IDLE
         elif info.get("soundPaused"):
             self._attr_playback_state = PlaybackState.PAUSED
+        else:
+            self._attr_playback_state = PlaybackState.PLAYING
         self._attr_available = True
 
     async def volume_set(self, volume_level: int) -> None:
