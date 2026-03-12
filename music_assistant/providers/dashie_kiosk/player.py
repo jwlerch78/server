@@ -45,6 +45,7 @@ class DashieKioskPlayer(Player):
             PlayerFeature.PAUSE,
             PlayerFeature.SEEK,
             PlayerFeature.PLAY_MEDIA,
+            PlayerFeature.NEXT_PREVIOUS,
         }
         self._attr_name = self.client.device_info.get("deviceName", "Dashie Kiosk")
         self._attr_device_info = DeviceInfo(
