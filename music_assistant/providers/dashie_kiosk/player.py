@@ -161,7 +161,7 @@ class DashieKioskPlayer(Player):
                     self._attr_elapsed_time_last_updated = time.time()
                 # In flow mode, MA updates current_media when the track changes.
                 # Push new metadata to the device if the track title has changed.
-                media = self._attr_current_media
+                media = self.state.current_media
                 logger = logging.getLogger(__name__)
                 logger.debug(
                     "Poll media check: title=%s, last_pushed=%s",
