@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import TYPE_CHECKING
 
@@ -37,6 +38,7 @@ class DashieKioskPlayer(Player):
         """Initialize the Dashie Kiosk Player."""
         super().__init__(provider, player_id)
         self.client = client
+        self._last_pushed_media_title: str | None = None
         self._attr_type = PlayerType.PLAYER
         self._attr_supported_features = {
             PlayerFeature.VOLUME_SET,
@@ -118,11 +120,28 @@ class DashieKioskPlayer(Player):
         """Play media on the device."""
         url = await self.provider.mass.streams.resolve_stream_url(self.player_id, media)
         await self.client.play_sound(url, AUDIOMANAGER_STREAM_MUSIC)
+        # Push track metadata to device for on-screen music player display
+        await self._push_media_info(media)
         self._attr_current_media = media
         self._attr_elapsed_time = 0
         self._attr_elapsed_time_last_updated = time.time()
         self._attr_playback_state = PlaybackState.PLAYING
         self.update_state()
+
+    async def _push_media_info(self, media: PlayerMedia) -> None:
+        """Push track metadata to the device for on-screen display."""
+        title = media.title or ""
+        try:
+            await self.client.set_media_info(
+                title=title,
+                artist=media.artist or "",
+                album=media.album or "",
+                image_url=media.image_url or "",
+                duration=(media.duration or 0) * 1000,  # seconds → milliseconds
+            )
+            self._last_pushed_media_title = title
+        except Exception as err:
+            logging.getLogger(__name__).debug("Failed to push media info: %s", err)
 
     async def poll(self) -> None:
         """Poll player for state updates."""
@@ -135,6 +154,15 @@ class DashieKioskPlayer(Player):
                 if position_ms is not None and self._attr_playback_state == PlaybackState.PLAYING:
                     self._attr_elapsed_time = float(position_ms) / 1000.0
                     self._attr_elapsed_time_last_updated = time.time()
+                # In flow mode, MA updates current_media when the track changes.
+                # Push new metadata to the device if the track title has changed.
+                media = self._attr_current_media
+                if (
+                    media is not None
+                    and media.title
+                    and media.title != self._last_pushed_media_title
+                ):
+                    await self._push_media_info(media)
                 self.update_state()
         except Exception as err:
             msg = f"Unable to connect to Dashie Kiosk device: {err!s}"

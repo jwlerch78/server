@@ -95,3 +95,21 @@ class DashieKioskClient:
     async def set_audio_volume(self, level: int, stream: int = 4) -> None:
         """Set the audio volume (0-100)."""
         await self._send_command("setAudioVolume", level=level, stream=stream)
+
+    async def set_media_info(
+        self,
+        title: str = "",
+        artist: str = "",
+        album: str = "",
+        image_url: str = "",
+        duration: int = 0,
+    ) -> None:
+        """Push track metadata to the device for on-screen display."""
+        await self._send_command(
+            "setMediaInfo",
+            title=title,
+            artist=artist,
+            album=album,
+            imageUrl=image_url,
+            duration=duration,
+        )
