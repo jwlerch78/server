@@ -120,8 +120,13 @@ class DashieKioskPlayer(Player):
         """Play media on the device."""
         url = await self.provider.mass.streams.resolve_stream_url(self.player_id, media)
         await self.client.play_sound(url, AUDIOMANAGER_STREAM_MUSIC)
-        # Push track metadata to device for on-screen music player display
-        await self._push_media_info(media)
+        # In flow mode the initial media object is a placeholder (title="Music Assistant").
+        # Real track metadata arrives later via current_media updates, picked up by poll().
+        # Only push now if we have a real track title (non-flow / direct play).
+        if media.title and media.artist:
+            await self._push_media_info(media)
+        else:
+            self._last_pushed_media_title = None  # ensure poll picks up the real track
         self._attr_current_media = media
         self._attr_elapsed_time = 0
         self._attr_elapsed_time_last_updated = time.time()
@@ -157,11 +162,18 @@ class DashieKioskPlayer(Player):
                 # In flow mode, MA updates current_media when the track changes.
                 # Push new metadata to the device if the track title has changed.
                 media = self._attr_current_media
+                logger = logging.getLogger(__name__)
+                logger.debug(
+                    "Poll media check: title=%s, last_pushed=%s",
+                    media.title if media else None,
+                    self._last_pushed_media_title,
+                )
                 if (
                     media is not None
                     and media.title
                     and media.title != self._last_pushed_media_title
                 ):
+                    logger.info("Pushing updated media info: %s", media.title)
                     await self._push_media_info(media)
                 self.update_state()
         except Exception as err:
