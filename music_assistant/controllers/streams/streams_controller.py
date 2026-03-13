@@ -24,6 +24,7 @@ from music_assistant_models.enums import (
     ConfigEntryType,
     ContentType,
     MediaType,
+    PlaybackState,
     PlayerFeature,
     StreamType,
     VolumeNormalizationMode,
@@ -368,6 +369,11 @@ class StreamsController(CoreController):
                     "GET",
                     "/player_state/{queue_id}",
                     self.serve_player_state,
+                ),
+                (
+                    "GET",
+                    "/player_state",
+                    self.serve_player_state_active,
                 ),
             ],
         )
@@ -823,6 +829,17 @@ class StreamsController(CoreController):
         except Exception as err:
             self.logger.warning("Failed to get player state for %s: %s", queue_id, err)
             return web.json_response({"error": str(err)}, status=500)
+
+    async def serve_player_state_active(self, request: web.Request) -> web.Response:
+        """Return state of whichever queue is currently playing (no auth required)."""
+        self._log_request(request)
+        # Find the first queue that is playing or paused
+        for queue in self.mass.player_queues.all():
+            if queue.state in (PlaybackState.PLAYING, PlaybackState.PAUSED):
+                # Reuse the per-queue handler by faking the match_info
+                request.match_info["queue_id"] = queue.queue_id
+                return await self.serve_player_state(request)
+        return web.json_response({"state": "idle"})
 
     async def serve_announcement_stream(self, request: web.Request) -> web.StreamResponse:
         """Stream announcement audio to a player."""
