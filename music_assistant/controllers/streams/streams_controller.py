@@ -741,6 +741,14 @@ class StreamsController(CoreController):
             self.mass.create_task(self.mass.player_queues.next(queue_id))
         elif command == "previous":
             self.mass.create_task(self.mass.player_queues.previous(queue_id))
+        elif command == "play":
+            self.mass.create_task(self.mass.player_queues.play(queue_id))
+        elif command == "pause":
+            self.mass.create_task(self.mass.player_queues.pause(queue_id))
+        elif command == "play_pause":
+            self.mass.create_task(self.mass.player_queues.play_pause(queue_id))
+        elif command == "stop":
+            self.mass.create_task(self.mass.player_queues.stop(queue_id))
         elif command == "play_media":
             # Play a media URI (e.g. library://album/15) on the queue
             uri = request.query.get("uri", "")
