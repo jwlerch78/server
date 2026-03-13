@@ -877,7 +877,7 @@ class StreamsController(CoreController):
 
             result = {
                 "state": queue.state.value,
-                "elapsed_time": round(queue.corrected_elapsed_time, 1),
+                "elapsed_time": round(queue.elapsed_time, 1),
                 "duration": duration,
                 "track": track_name,
                 "artist": artist_name,
