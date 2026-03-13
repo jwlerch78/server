@@ -776,6 +776,11 @@ class StreamsController(CoreController):
             to = request.query.get("to", "")
             if to:
                 self.mass.create_task(self.mass.player_queues.transfer_queue(queue_id, to))
+        elif command == "volume_set":
+            # Set player volume (0-100)
+            level = request.query.get("level", "")
+            if level:
+                self.mass.create_task(self.mass.players.cmd_volume_set(queue_id, int(level)))
         return web.FileResponse(SILENCE_FILE, headers={"icy-name": "Music Assistant"})
 
     async def serve_recently_played(self, request: web.Request) -> web.Response:
@@ -855,6 +860,9 @@ class StreamsController(CoreController):
             if not player_name or player_name == (player.name if player else ""):
                 player_name = _friendly_name(queue_id, player.name if player else "")
 
+            # Get player volume level (0-100)
+            volume_level = player.state.volume_level if player and player.state else None
+
             result = {
                 "state": queue.state.value,
                 "elapsed_time": round(queue.corrected_elapsed_time, 1),
@@ -867,6 +875,7 @@ class StreamsController(CoreController):
                 "repeat": queue.repeat_mode.value,
                 "queue_id": queue.queue_id,
                 "player_name": player_name,
+                "volume_level": volume_level,
             }
             return web.json_response(result)
         except Exception as err:
