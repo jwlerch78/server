@@ -141,18 +141,18 @@ class DashieKioskPlayer(Player):
     async def _push_media_info(self, media: PlayerMedia) -> None:
         """Push track metadata to the device for on-screen display."""
         title = media.title or ""
-        # Send MA server URL so the device can call MA's REST API directly
-        # for commands like next/previous that need to go through MA's queue controller
-        webserver = self.provider.mass.webserver
-        ma_server_url = webserver.base_url
+        # Send MA streams server URL so the device can call unauthenticated REST endpoints
+        # (player_state, recently_played, command) directly
+        streams = self.provider.mass.streams
+        ma_server_url = streams.base_url
         if not ma_server_url:
             # Fallback: construct from publish IP/port
-            ma_server_url = f"http://{webserver.publish_ip}:{webserver.publish_port}"
+            ma_server_url = f"http://{streams.publish_ip}:{streams.publish_port}"
         logging.getLogger(__name__).info(
             "Pushing media info: %s (ma_server_url=%s, base_url=%s)",
             title,
             ma_server_url,
-            webserver.base_url,
+            streams.base_url,
         )
         try:
             await self.client.set_media_info(
