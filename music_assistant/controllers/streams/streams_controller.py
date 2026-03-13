@@ -832,7 +832,7 @@ class StreamsController(CoreController):
                         album_name = mi.album.name
 
             # Get player friendly name
-            player = self.mass.players.get(queue_id)
+            player = self.mass.players.get_player(queue_id)
             player_name = player.name if player else queue.display_name
 
             result = {
