@@ -1,4 +1,4 @@
-"""Dashie Kiosk Player provider for Music Assistant."""
+"""Dashie Player provider for Music Assistant."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from urllib.parse import urlparse
 
 from music_assistant.models.player_provider import PlayerProvider
 
-from .client import DashieKioskClient
+from .client import DashieClient
 from .constants import CONF_MANUAL_PLAYERS, CONF_PLAYERS, DASHIE_HA_DOMAIN, RETRY_INTERVAL
-from .player import DashieKioskPlayer
+from .player import DashiePlayer
 
 if TYPE_CHECKING:
     from hass_client.models import Device as HassDevice
@@ -24,8 +24,8 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
-class DashieKioskProvider(PlayerProvider):
-    """Player provider for Dashie Kiosk Android tablets."""
+class DashieProvider(PlayerProvider):
+    """Player provider for Dashie Android tablets."""
 
     hass_prov: HomeAssistantProvider | None
     _pending_players: dict[str, HassDevice | None]
@@ -68,7 +68,9 @@ class DashieKioskProvider(PlayerProvider):
 
     async def _setup_ha_players(self, player_ids: list[str]) -> None:
         """Set up players discovered via Home Assistant."""
-        assert self.hass_prov is not None
+        if self.hass_prov is None:
+            _LOGGER.warning("Home Assistant provider not available, cannot set up HA players")
+            return
         # Fetch device and entity registries from HA
         device_registry = {x["id"]: x for x in await self.hass_prov.hass.get_device_registry()}
         entity_registry = {
@@ -136,12 +138,12 @@ class DashieKioskProvider(PlayerProvider):
             _LOGGER.warning("Could not parse host from %s", config_url)
             return False
         # Create a direct REST API client
-        client = DashieKioskClient(self.mass.http_session_no_ssl, host, port, password="")
+        client = DashieClient(self.mass.http_session_no_ssl, host, port, password="")
         try:
             async with asyncio.timeout(15):
                 await client.get_device_info()
         except Exception as err:
-            _LOGGER.warning("Unable to connect to Dashie Kiosk at %s:%s - %s", host, port, err)
+            _LOGGER.warning("Unable to connect to Dashie at %s:%s - %s", host, port, err)
             return False
         # Collect device info from HA registry
         dev_info: dict[str, Any] = {}
@@ -153,7 +155,7 @@ class DashieKioskProvider(PlayerProvider):
             if sw_version := hass_device.get("sw_version"):
                 dev_info["software_version"] = sw_version
         # Create and register the player
-        player = DashieKioskPlayer(self, entity_id, client, f"{host}:{port}", dev_info)
+        player = DashiePlayer(self, entity_id, client, f"{host}:{port}", dev_info)
         player.set_attributes()
         await self.mass.players.register(player)
         return True
@@ -165,16 +167,16 @@ class DashieKioskProvider(PlayerProvider):
         else:
             host = address
             port = "2323"
-        client = DashieKioskClient(self.mass.http_session_no_ssl, host, port, password="")
+        client = DashieClient(self.mass.http_session_no_ssl, host, port, password="")
         try:
             async with asyncio.timeout(15):
                 await client.get_device_info()
         except Exception as err:
-            _LOGGER.warning("Unable to connect to Dashie Kiosk at %s:%s - %s", host, port, err)
+            _LOGGER.warning("Unable to connect to Dashie at %s:%s - %s", host, port, err)
             return False
         # Use the device ID from the device info, falling back to the address
         device_id = client.device_info.get("deviceID", address)
-        player = DashieKioskPlayer(self, device_id, client, f"{host}:{port}")
+        player = DashiePlayer(self, device_id, client, f"{host}:{port}")
         player.set_attributes()
         await self.mass.players.register(player)
         return True

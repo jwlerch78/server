@@ -1,9 +1,8 @@
-"""Dashie Kiosk Player implementation."""
+"""Dashie Player implementation."""
 
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 from typing import TYPE_CHECKING
 
@@ -18,24 +17,24 @@ if TYPE_CHECKING:
 
     from music_assistant_models.config_entries import ConfigEntry, ConfigValueType
 
-    from .client import DashieKioskClient
-    from .provider import DashieKioskProvider
+    from .client import DashieClient
+    from .provider import DashieProvider
 
 AUDIOMANAGER_STREAM_MUSIC = 4
 
 
-class DashieKioskPlayer(Player):
-    """Dashie Kiosk Player implementation."""
+class DashiePlayer(Player):
+    """Dashie Player implementation."""
 
     def __init__(
         self,
-        provider: DashieKioskProvider,
+        provider: DashieProvider,
         player_id: str,
-        client: DashieKioskClient,
+        client: DashieClient,
         address: str,
         dev_info: dict[str, Any] | None = None,
     ) -> None:
-        """Initialize the Dashie Kiosk Player."""
+        """Initialize the Dashie Player."""
         super().__init__(provider, player_id)
         self.client = client
         self._last_pushed_media_title: str | None = None
@@ -47,7 +46,7 @@ class DashieKioskPlayer(Player):
             PlayerFeature.PLAY_MEDIA,
             PlayerFeature.NEXT_PREVIOUS,
         }
-        self._attr_name = self.client.device_info.get("deviceName", "Dashie Kiosk")
+        self._attr_name = self.client.device_info.get("deviceName", "Dashie")
         self._attr_device_info = DeviceInfo(
             model=(dev_info or {}).get(
                 "model", self.client.device_info.get("deviceModel", "Android")
@@ -76,7 +75,7 @@ class DashieKioskPlayer(Player):
     def set_attributes(self) -> None:
         """Set/update player attributes from device info."""
         info = self.client.device_info
-        self._attr_name = info.get("deviceName", "Dashie Kiosk")
+        self._attr_name = info.get("deviceName", "Dashie")
         volume = info.get("audioVolume")
         if volume is not None:
             self._attr_volume_level = int(volume)
@@ -148,7 +147,7 @@ class DashieKioskPlayer(Player):
         if not ma_server_url:
             # Fallback: construct from publish IP/port
             ma_server_url = f"http://{streams.publish_ip}:{streams.publish_port}"
-        logging.getLogger(__name__).info(
+        self.logger.info(
             "Pushing media info: %s (ma_server_url=%s, base_url=%s)",
             title,
             ma_server_url,
@@ -166,7 +165,7 @@ class DashieKioskPlayer(Player):
             )
             self._last_pushed_media_title = title
         except Exception as err:
-            logging.getLogger(__name__).debug("Failed to push media info: %s", err)
+            self.logger.debug("Failed to push media info: %s", err)
 
     async def poll(self) -> None:
         """Poll player for state updates."""
@@ -182,8 +181,7 @@ class DashieKioskPlayer(Player):
                 # In flow mode, MA updates current_media when the track changes.
                 # Push new metadata to the device if the track title has changed.
                 media = self.state.current_media
-                logger = logging.getLogger(__name__)
-                logger.debug(
+                self.logger.debug(
                     "Poll media check: title=%s, last_pushed=%s",
                     media.title if media else None,
                     self._last_pushed_media_title,
@@ -194,9 +192,9 @@ class DashieKioskPlayer(Player):
                     and media.artist  # skip placeholders with no artist
                     and media.title != self._last_pushed_media_title
                 ):
-                    logger.info("Pushing updated media info: %s", media.title)
+                    self.logger.info("Pushing updated media info: %s", media.title)
                     await self._push_media_info(media)
                 self.update_state()
         except Exception as err:
-            msg = f"Unable to connect to Dashie Kiosk device: {err!s}"
+            msg = f"Unable to connect to Dashie device: {err!s}"
             raise PlayerUnavailableError(msg) from err

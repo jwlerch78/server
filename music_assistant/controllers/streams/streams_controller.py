@@ -749,11 +749,14 @@ class StreamsController(CoreController):
 
         return resp
 
-    async def serve_command_request(self, request: web.Request) -> web.FileResponse:
+    async def serve_command_request(self, request: web.Request) -> web.StreamResponse:
         """Handle special 'command' request for a player."""
         self._log_request(request)
         queue_id = request.match_info["queue_id"]
         command = request.match_info["command"]
+        queue = self.mass.player_queues.get(queue_id)
+        if not queue:
+            return web.json_response({"error": f"Unknown queue: {queue_id}"}, status=404)
         if command == "next":
             self.mass.create_task(self.mass.player_queues.next(queue_id))
         elif command == "previous":
@@ -780,13 +783,22 @@ class StreamsController(CoreController):
             # Set player volume (0-100)
             level = request.query.get("level", "")
             if level:
-                self.mass.create_task(self.mass.players.cmd_volume_set(queue_id, int(level)))
+                try:
+                    vol = min(100, max(0, int(level)))
+                except ValueError:
+                    return web.json_response(
+                        {"error": f"Invalid volume level: {level}"}, status=400
+                    )
+                self.mass.create_task(self.mass.players.cmd_volume_set(queue_id, vol))
         return web.FileResponse(SILENCE_FILE, headers={"icy-name": "Music Assistant"})
 
     async def serve_recently_played(self, request: web.Request) -> web.Response:
         """Return recently played items as JSON (no auth required)."""
         self._log_request(request)
-        limit = int(request.query.get("limit", "10"))
+        try:
+            limit = min(100, max(1, int(request.query.get("limit", "10"))))
+        except ValueError:
+            limit = 10
         try:
             items = await self.mass.music.recently_played(limit=limit)
             result = []
@@ -858,7 +870,7 @@ class StreamsController(CoreController):
             player = self.mass.players.get_player(queue_id)
             player_name = queue.display_name or (player.name if player else "")
             if not player_name or player_name == (player.name if player else ""):
-                player_name = _friendly_name(queue_id, player.name if player else "")
+                player_name = _friendly_name(queue_id, (player.name or "") if player else "")
 
             # Get player volume level (0-100)
             volume_level = player.state.volume_level if player and player.state else None
@@ -907,7 +919,7 @@ class StreamsController(CoreController):
                 result.append(
                     {
                         "player_id": player.player_id,
-                        "name": _friendly_name(player.player_id, player.name),
+                        "name": _friendly_name(player.player_id, player.name or ""),
                         "available": player.available,
                         "type": player.type.value,
                         "state": queue_state,
