@@ -105,6 +105,23 @@ if TYPE_CHECKING:
 
 isfile = wrap(os.path.isfile)
 
+
+def _friendly_name(player_id: str, raw_name: str) -> str:
+    """Derive a friendly display name from a player_id.
+
+    For media_player.* entities, strip prefix and title-case:
+      media_player.dashie_fire_tablet_speaker → Dashie Fire Tablet Speaker
+    For other IDs, return the raw provider name.
+    """
+    if player_id.startswith("media_player."):
+        slug = player_id.removeprefix("media_player.")
+        # Remove trailing _speaker suffix for cleaner names
+        if slug.endswith("_speaker"):
+            slug = slug.removesuffix("_speaker") + " Speaker"
+        return slug.replace("_", " ").title()
+    return raw_name or player_id
+
+
 CONF_ALLOW_BUFFER: Final[str] = "allow_buffering"
 CONF_ALLOW_CROSSFADE_SAME_ALBUM: Final[str] = "allow_crossfade_same_album"
 CONF_SMART_FADES_LOG_LEVEL: Final[str] = "smart_fades_log_level"
@@ -831,9 +848,12 @@ class StreamsController(CoreController):
                     if hasattr(mi, "album") and mi.album:
                         album_name = mi.album.name
 
-            # Get player friendly name
+            # Get player friendly name — prefer display_name, fall back to
+            # a title-cased version of the entity ID for media_player.* entities
             player = self.mass.players.get_player(queue_id)
-            player_name = player.name if player else queue.display_name
+            player_name = queue.display_name or (player.name if player else "")
+            if not player_name or player_name == (player.name if player else ""):
+                player_name = _friendly_name(queue_id, player.name if player else "")
 
             result = {
                 "state": queue.state.value,
@@ -878,7 +898,7 @@ class StreamsController(CoreController):
                 result.append(
                     {
                         "player_id": player.player_id,
-                        "name": player.name,
+                        "name": _friendly_name(player.player_id, player.name),
                         "available": player.available,
                         "type": player.type.value,
                         "state": queue_state,
