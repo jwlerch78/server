@@ -831,6 +831,10 @@ class StreamsController(CoreController):
                     if hasattr(mi, "album") and mi.album:
                         album_name = mi.album.name
 
+            # Get player friendly name
+            player = self.mass.players.get(queue_id)
+            player_name = player.name if player else queue.display_name
+
             result = {
                 "state": queue.state.value,
                 "elapsed_time": round(queue.corrected_elapsed_time, 1),
@@ -842,6 +846,7 @@ class StreamsController(CoreController):
                 "shuffle": queue.shuffle_enabled,
                 "repeat": queue.repeat_mode.value,
                 "queue_id": queue.queue_id,
+                "player_name": player_name,
             }
             return web.json_response(result)
         except Exception as err:
