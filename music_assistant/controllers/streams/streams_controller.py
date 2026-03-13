@@ -746,6 +746,11 @@ class StreamsController(CoreController):
             uri = request.query.get("uri", "")
             if uri:
                 self.mass.create_task(self.mass.player_queues.play_media(queue_id, media=[uri]))
+        elif command == "transfer_queue":
+            # Transfer queue to another player
+            to = request.query.get("to", "")
+            if to:
+                self.mass.create_task(self.mass.player_queues.transfer_queue(queue_id, to))
         return web.FileResponse(SILENCE_FILE, headers={"icy-name": "Music Assistant"})
 
     async def serve_recently_played(self, request: web.Request) -> web.Response:
