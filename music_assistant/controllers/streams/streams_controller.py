@@ -375,6 +375,11 @@ class StreamsController(CoreController):
                     "/player_state",
                     self.serve_player_state_active,
                 ),
+                (
+                    "GET",
+                    "/players",
+                    self.serve_players,
+                ),
             ],
         )
         # Start periodic garbage collection task
@@ -840,6 +845,32 @@ class StreamsController(CoreController):
                 request.match_info["queue_id"] = queue.queue_id
                 return await self.serve_player_state(request)
         return web.json_response({"state": "idle"})
+
+    async def serve_players(self, request: web.Request) -> web.Response:
+        """Return list of available MA players (no auth required)."""
+        self._log_request(request)
+        try:
+            result = []
+            for player in self.mass.players.all_players(
+                return_unavailable=False, return_disabled=False
+            ):
+                # Get queue state if available
+                queue = self.mass.player_queues.get(player.player_id)
+                queue_state = queue.state.value if queue else "idle"
+                result.append(
+                    {
+                        "player_id": player.player_id,
+                        "name": player.name,
+                        "available": player.available,
+                        "type": player.type.value,
+                        "state": queue_state,
+                        "powered": player.powered,
+                    }
+                )
+            return web.json_response(result)
+        except Exception as err:
+            self.logger.warning("Failed to get players: %s", err)
+            return web.json_response([])
 
     async def serve_announcement_stream(self, request: web.Request) -> web.StreamResponse:
         """Stream announcement audio to a player."""
