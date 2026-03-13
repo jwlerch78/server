@@ -359,6 +359,16 @@ class StreamsController(CoreController):
                     "/pluginsource/{plugin_source}/{player_id}.{fmt}",
                     self.serve_plugin_source_stream,
                 ),
+                (
+                    "GET",
+                    "/recently_played",
+                    self.serve_recently_played,
+                ),
+                (
+                    "GET",
+                    "/player_state/{queue_id}",
+                    self.serve_player_state,
+                ),
             ],
         )
         # Start periodic garbage collection task
@@ -718,7 +728,101 @@ class StreamsController(CoreController):
         command = request.match_info["command"]
         if command == "next":
             self.mass.create_task(self.mass.player_queues.next(queue_id))
+        elif command == "previous":
+            self.mass.create_task(self.mass.player_queues.previous(queue_id))
+        elif command == "play_media":
+            # Play a media URI (e.g. library://album/15) on the queue
+            uri = request.query.get("uri", "")
+            if uri:
+                self.mass.create_task(self.mass.player_queues.play_media(queue_id, media=[uri]))
         return web.FileResponse(SILENCE_FILE, headers={"icy-name": "Music Assistant"})
+
+    async def serve_recently_played(self, request: web.Request) -> web.Response:
+        """Return recently played items as JSON (no auth required)."""
+        self._log_request(request)
+        limit = int(request.query.get("limit", "10"))
+        try:
+            items = await self.mass.music.recently_played(limit=limit)
+            result = []
+            streams_base = self.base_url
+            for item in items:
+                img_url = ""
+                if item.image:
+                    if item.image.remotely_accessible:
+                        img_url = item.image.path
+                    else:
+                        # Route through streams server's imageproxy (no auth needed)
+                        img_url = (
+                            f"{streams_base}/imageproxy?"
+                            f"path={urllib.parse.quote(item.image.path)}"
+                            f"&provider={urllib.parse.quote(item.image.provider)}"
+                            f"&size=256"
+                        )
+                result.append(
+                    {
+                        "name": item.name,
+                        "uri": item.uri,
+                        "media_type": item.media_type.value if item.media_type else "",
+                        "image_url": img_url,
+                    }
+                )
+            return web.json_response(result)
+        except Exception as err:
+            self.logger.warning("Failed to get recently played: %s", err)
+            return web.json_response([])
+
+    async def serve_player_state(self, request: web.Request) -> web.Response:
+        """Return current player/queue state as JSON (no auth required)."""
+        self._log_request(request)
+        queue_id = request.match_info["queue_id"]
+        queue = self.mass.player_queues.get(queue_id)
+        if not queue:
+            return web.json_response({"error": f"Unknown queue: {queue_id}"}, status=404)
+        try:
+            streams_base = self.base_url
+            # Build current item info
+            track_name = ""
+            artist_name = ""
+            album_name = ""
+            image_url = ""
+            duration = 0
+            if item := queue.current_item:
+                track_name = item.name or ""
+                duration = item.duration or 0
+                if item.image:
+                    if item.image.remotely_accessible:
+                        image_url = item.image.path
+                    else:
+                        image_url = (
+                            f"{streams_base}/imageproxy?"
+                            f"path={urllib.parse.quote(item.image.path)}"
+                            f"&provider={urllib.parse.quote(item.image.provider)}"
+                            f"&size=256"
+                        )
+                # Extract artist/album from media_item if it's a track
+                if item.media_item:
+                    mi = item.media_item
+                    if hasattr(mi, "artists") and mi.artists:
+                        artist_name = " / ".join(a.name for a in mi.artists)
+                    if hasattr(mi, "album") and mi.album:
+                        album_name = mi.album.name
+
+            result = {
+                "state": queue.state.value,
+                "elapsed_time": round(queue.corrected_elapsed_time, 1),
+                "duration": duration,
+                "track": track_name,
+                "artist": artist_name,
+                "album": album_name,
+                "image_url": image_url,
+                "shuffle": queue.shuffle_enabled,
+                "repeat": queue.repeat_mode.value,
+                "queue_id": queue.queue_id,
+            }
+            return web.json_response(result)
+        except Exception as err:
+            self.logger.warning("Failed to get player state for %s: %s", queue_id, err)
+            return web.json_response({"error": str(err)}, status=500)
 
     async def serve_announcement_stream(self, request: web.Request) -> web.StreamResponse:
         """Stream announcement audio to a player."""
@@ -1229,7 +1333,7 @@ class StreamsController(CoreController):
         )
 
         async def fetch_announcement() -> None:
-            fmt = announcement_url.rsplit(".")[-1]
+            fmt = announcement_url.rsplit(".", maxsplit=1)[-1]
             async for chunk in get_ffmpeg_stream(
                 audio_input=announcement_url,
                 input_format=AudioFormat(content_type=ContentType.try_parse(fmt)),

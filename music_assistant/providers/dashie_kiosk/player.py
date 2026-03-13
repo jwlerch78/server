@@ -141,6 +141,19 @@ class DashieKioskPlayer(Player):
     async def _push_media_info(self, media: PlayerMedia) -> None:
         """Push track metadata to the device for on-screen display."""
         title = media.title or ""
+        # Send MA server URL so the device can call MA's REST API directly
+        # for commands like next/previous that need to go through MA's queue controller
+        webserver = self.provider.mass.webserver
+        ma_server_url = webserver.base_url
+        if not ma_server_url:
+            # Fallback: construct from publish IP/port
+            ma_server_url = f"http://{webserver.publish_ip}:{webserver.publish_port}"
+        logging.getLogger(__name__).info(
+            "Pushing media info: %s (ma_server_url=%s, base_url=%s)",
+            title,
+            ma_server_url,
+            webserver.base_url,
+        )
         try:
             await self.client.set_media_info(
                 title=title,
@@ -149,6 +162,7 @@ class DashieKioskPlayer(Player):
                 image_url=media.image_url or "",
                 duration=(media.duration or 0) * 1000,  # seconds → milliseconds
                 entity_id=self.player_id,
+                ma_server_url=ma_server_url,
             )
             self._last_pushed_media_title = title
         except Exception as err:

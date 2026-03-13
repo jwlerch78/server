@@ -55,6 +55,8 @@ class DashieKioskClient:
             if value is not None:
                 params.append((key, str(value)))
 
+        if cmd == "setMediaInfo":
+            _LOGGER.info("setMediaInfo params: %s", dict(kwargs))
         _LOGGER.debug("Sending command to %s: %s %s", url, cmd, kwargs)
         async with self._session.get(
             url, params=params, headers={"Accept": "application/json"}, ssl=False
@@ -104,6 +106,7 @@ class DashieKioskClient:
         image_url: str = "",
         duration: int = 0,
         entity_id: str = "",
+        ma_server_url: str = "",
     ) -> None:
         """Push track metadata to the device for on-screen display."""
         await self._send_command(
@@ -114,4 +117,5 @@ class DashieKioskClient:
             imageUrl=image_url,
             duration=duration,
             entityId=entity_id,
+            maServerUrl=ma_server_url,
         )
