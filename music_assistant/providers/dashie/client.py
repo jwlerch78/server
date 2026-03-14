@@ -98,6 +98,10 @@ class DashieClient:
         """Set the audio volume (0-100)."""
         await self._send_command("setAudioVolume", level=level, stream=stream)
 
+    async def set_player_id(self, player_id: str, ma_server_url: str = "") -> None:
+        """Tell the device its own MA player/entity ID and server URL."""
+        await self._send_command("setPlayerId", playerId=player_id, maServerUrl=ma_server_url)
+
     async def set_media_info(
         self,
         title: str = "",

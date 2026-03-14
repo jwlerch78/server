@@ -845,7 +845,12 @@ class StreamsController(CoreController):
             image_url = ""
             duration = 0
             if item := queue.current_item:
-                track_name = item.name or ""
+                # Prefer media_item.name (clean track title) over item.name
+                # which may be "Artist - Title" format
+                if item.media_item and hasattr(item.media_item, "name") and item.media_item.name:
+                    track_name = item.media_item.name
+                else:
+                    track_name = item.name or ""
                 duration = item.duration or 0
                 if item.image:
                     if item.image.remotely_accessible:
@@ -864,6 +869,9 @@ class StreamsController(CoreController):
                         artist_name = " / ".join(a.name for a in mi.artists)
                     if hasattr(mi, "album") and mi.album:
                         album_name = mi.album.name
+                # Strip artist prefix from track name (flow mode items often have "Artist - Title")
+                if artist_name and track_name.startswith(f"{artist_name} - "):
+                    track_name = track_name[len(f"{artist_name} - ") :]
 
             # Get player friendly name — prefer display_name, fall back to
             # a title-cased version of the entity ID for media_player.* entities
@@ -875,9 +883,38 @@ class StreamsController(CoreController):
             # Get player volume level (0-100)
             volume_level = player.state.volume_level if player and player.state else None
 
+            # Elapsed time: queue.elapsed_time is computed from the flow log.
+            # Log diagnostics to debug flow log drift issues.
+            player_corrected = player.state.corrected_elapsed_time if player else None
+            player_raw = player.state.elapsed_time if player and player.state else None
+            flow_log_len = len(queue.flow_mode_stream_log) if queue.flow_mode_stream_log else 0
+            self.logger.debug(
+                "player_state %s: queue.elapsed=%.1f, player.corrected=%s, "
+                "player.raw=%s, flow_mode=%s, flow_log_entries=%d, duration=%d",
+                queue_id,
+                queue.elapsed_time,
+                player_corrected,
+                player_raw,
+                queue.flow_mode,
+                flow_log_len,
+                duration,
+            )
+            elapsed = queue.elapsed_time
+            # Sanity: if queue.elapsed_time is clearly wrong (> duration or negative),
+            # clamp it. This catches flow log drift.
+            if duration and elapsed > duration:
+                elapsed = max(0, elapsed % duration) if duration > 0 else 0
+                self.logger.warning(
+                    "player_state %s: queue.elapsed_time %.1f > duration %d, clamped to %.1f",
+                    queue_id,
+                    queue.elapsed_time,
+                    duration,
+                    elapsed,
+                )
+
             result = {
                 "state": queue.state.value,
-                "elapsed_time": round(queue.elapsed_time, 1),
+                "elapsed_time": round(elapsed, 1),
                 "duration": duration,
                 "track": track_name,
                 "artist": artist_name,

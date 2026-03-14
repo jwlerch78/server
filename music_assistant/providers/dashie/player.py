@@ -58,6 +58,7 @@ class DashiePlayer(Player):
         self._attr_available = True
         self._attr_needs_poll = True
         self._attr_poll_interval = 3
+        self._player_id_sent = False
 
     @property
     def requires_flow_mode(self) -> bool:
@@ -140,6 +141,10 @@ class DashiePlayer(Player):
     async def _push_media_info(self, media: PlayerMedia) -> None:
         """Push track metadata to the device for on-screen display."""
         title = media.title or ""
+        # Strip "Artist - " prefix from title if artist is already provided separately
+        artist = media.artist or ""
+        if artist and title.startswith(f"{artist} - "):
+            title = title[len(f"{artist} - ") :]
         # Send MA streams server URL so the device can call unauthenticated REST endpoints
         # (player_state, recently_played, command) directly
         streams = self.provider.mass.streams
@@ -173,8 +178,27 @@ class DashiePlayer(Player):
             async with asyncio.timeout(15):
                 await self.client.get_device_info()
                 self.set_attributes()
+                # Push this device's player ID on first successful connect
+                if not self._player_id_sent:
+                    try:
+                        streams = self.provider.mass.streams
+                        ma_url = (
+                            streams.base_url
+                            or f"http://{streams.publish_ip}:{streams.publish_port}"
+                        )
+                        await self.client.set_player_id(self.player_id, ma_url)
+                        self._player_id_sent = True
+                        self.logger.info(
+                            "Pushed player ID to device: %s (server=%s)", self.player_id, ma_url
+                        )
+                    except Exception as err:
+                        self.logger.warning("Failed to push player ID: %s", err)
                 info = self.client.device_info
-                position_ms = info.get("audioPosition")
+                # Prefer track-relative position over cumulative flow position
+                track_pos_ms = info.get("trackPosition")
+                position_ms = (
+                    track_pos_ms if track_pos_ms is not None else info.get("audioPosition")
+                )
                 if position_ms is not None and self._attr_playback_state == PlaybackState.PLAYING:
                     self._attr_elapsed_time = float(position_ms) / 1000.0
                     self._attr_elapsed_time_last_updated = time.time()

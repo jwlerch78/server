@@ -158,6 +158,20 @@ class DashieProvider(PlayerProvider):
         player = DashiePlayer(self, entity_id, client, f"{host}:{port}", dev_info)
         player.set_attributes()
         await self.mass.players.register(player)
+        # Push player ID + server URL immediately so the device knows its identity
+        streams = self.mass.streams
+        ma_server_url = streams.base_url or f"http://{streams.publish_ip}:{streams.publish_port}"
+        try:
+            await client.set_player_id(entity_id, ma_server_url)
+            player._player_id_sent = True
+            _LOGGER.info(
+                "Pushed player ID to %s during setup: %s (server=%s)",
+                host,
+                entity_id,
+                ma_server_url,
+            )
+        except Exception as err:
+            _LOGGER.warning("Failed to push player ID to %s during setup: %s", host, err)
         return True
 
     async def _setup_manual_player(self, address: str) -> bool:
